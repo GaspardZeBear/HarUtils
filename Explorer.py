@@ -52,6 +52,10 @@ class Explorer() :
     self.dns=float(args.dns)
     self.connect=float(args.connect)
     self.timings=Timings(args)
+    self.includeRegexp=self.args.minclude if len(self.args.minclude) > 0 else '.*'
+    self.excludeRegexp=self.args.mexclude if len(self.args.mexclude) > 0 else ''
+    self.idomainRegexp=self.args.idomain if len(self.args.idomain) > 0 else '.*'
+    self.xdomainRegexp=self.args.xdomain if len(self.args.xdomain) > 0 else ''
     self.showHeaders=args.showHeaders
     self.showResponseContent=args.showResponseContent
     self.range=args.range
@@ -64,6 +68,23 @@ class Explorer() :
       self.endIdx=int(t[1])
     self.pages()
     self.requests()
+
+  #-----------------------------------------------------------------------------------------
+  def filterUrlKeep(self,url) :
+
+    if len(self.excludeRegexp) > 0 and re.search(self.excludeRegexp,url) :
+      return(False)
+    if not re.search(self.includeRegexp,url) :
+      return(False)
+
+    x=re.split("/",url)
+    #print(f'{x}')
+    if len(x) > 2 :
+      if not re.search(self.idomainRegexp,x[2]) :
+        return(False)
+      if len(self.xdomainRegexp) > 0 and re.search(self.xdomainRegexp,x[2]) :
+        return(False)
+    return(True)
 
   #-----------------------------------------------------------------------------------------
   def getHeadOfBlock(self,num) :
@@ -108,10 +129,6 @@ class Explorer() :
   def requests(self) :
     with open(self.args.file) as fIn :
       data=json.load(fIn)
-    includeRegexp=self.args.minclude if len(self.args.minclude) > 0 else '.*'
-    excludeRegexp=self.args.mexclude if len(self.args.mexclude) > 0 else ''
-    idomainRegexp=self.args.idomain if len(self.args.idomain) > 0 else '.*'
-    xdomainRegexp=self.args.xdomain if len(self.args.xdomain) > 0 else ''
     threshold=int(self.args.threshold) if len(self.args.threshold) > 0 else 5000
     
     absStartm1=0
@@ -146,22 +163,9 @@ class Explorer() :
         req=entry["request"]
         url = req["url"]
 
-        if len(excludeRegexp) > 0 and re.search(excludeRegexp,url) :
+        if not self.filterUrlKeep(url) :
           continue
-        if not re.search(includeRegexp,url) :
-          continue
-
-        x=re.split("/",url)
-        #print(f'{x}')
-        if len(x) > 2 :
-          if not re.search(idomainRegexp,x[2]) :
-            continue
-          if len(xdomainRegexp) > 0 and re.search(xdomainRegexp,x[2]) :
-            continue
-        entriesCount += 1
-        start=entry["startedDateTime"]
         blocked=0
-
         timing=None
         if "timings" in entry :
           timing=entry["timings"]
@@ -171,6 +175,9 @@ class Explorer() :
         duration=float(entry["time"])
         if duration < self.latency :
           continue
+
+        entriesCount += 1
+        start=entry["startedDateTime"]
 
         rc=entry["response"]["status"]
         absStart=Utils().getAbsTime(start)
