@@ -70,13 +70,21 @@ class Explorer() :
     self.requests()
 
   #-----------------------------------------------------------------------------------------
-  def filterUrlKeep(self,url) :
+  def getIdToDisplay(self,url) :
+    id=url[self.urlBegin:self.urlEnd]
+    if self.name :
+      t=re.split("/",url)
+      if len(t) == 3 :
+        t[2]="*"
+      id=t[0]+'//'+t[1]+t[2]+'...'+t[-1]
+    return(id)
 
+  #-----------------------------------------------------------------------------------------
+  def filterUrlKeep(self,url) :
     if len(self.excludeRegexp) > 0 and re.search(self.excludeRegexp,url) :
       return(False)
     if not re.search(self.includeRegexp,url) :
       return(False)
-
     x=re.split("/",url)
     #print(f'{x}')
     if len(x) > 2 :
@@ -91,7 +99,6 @@ class Explorer() :
     h = f"\n=RequestBlock{num}\n"
     h +='   Num absDelta blkStart   prevBlk   start       blocked realStart       duration initiator pgref method RC url\n'
     return(h)
-
 
   #-----------------------------------------------------------------------------------------
   def pages(self) :
@@ -134,36 +141,31 @@ class Explorer() :
     absStartm1=0
     blockStart=0
     absDelta=0
-    #entries=Utils().getRealStartSortedEntries(data["log"]["entries"]) 
     if len(self.range) > 0 :
       entries=Utils().getRealStartSortedEntries(data["log"]["entries"])[self.startIdx:self.endIdx]
     else :
       entries=Utils().getRealStartSortedEntries(data["log"]["entries"])
 
     blockNum=2
-    print("-------------------- Requests ---------------------------------- ")
+    print(f"-------------------- Requests (total {len(entries)} )--------------- ")
     print(self.getHeadOfBlock(1))
     entriesCount=self.startIdx - 1
     for entry in entries:
-      #print(entry)
       pageref= entry["pageref"] if "pageref" in entry else "--"
       if "request" in entry :
         # _initiator only with edge/chrome
         initiator=entry["_initiator"] if "_initiator" in entry else {"type":"--"}
-        #print()
         logging.debug(f'_initiator {initiator}')
         if type(initiator) is dict and "type" in initiator :
           myType=initiator["type"]
         else :
           myType="--"
-        logging.debug(f'type {myType}')
         mark="-"
         if myType == "script" or myType=="preflight" :
           mark="+"
-        req=entry["request"]
-        url = req["url"]
+        url=entry["request"]["url"]
 
-        if not self.filterUrlKeep(url) :
+        if not self.filterUrlKeep(entry["request"]["url"]) :
           continue
         blocked=0
         timing=None
@@ -179,7 +181,6 @@ class Explorer() :
         entriesCount += 1
         start=entry["startedDateTime"]
 
-        rc=entry["response"]["status"]
         absStart=Utils().getAbsTime(start)
         realStart=Utils().getAbsTime(start) + blocked
         if absStartm1 > 0  :
@@ -198,17 +199,25 @@ class Explorer() :
           sinceBlockStart=absStart - blockStart
           cr=""
         sinceBlockStart=absStart - blockStart
-        method = req["method"]
-        #print(f'{cr}{mark} {entriesCount:4} {absDelta/1000:8.3f} {sinceBlockStart/1000:8.3f} {delta/1000:8.3f} {start[11:-1]} {blocked:8.3f} {Utils().getHhmmss(realStart)}    {duration/1000:6.3f} {initiator["type"]:10s} {pageref:8s} {method:7s} {rc:3d}  {url[self.urlBegin:self.urlEnd]}')
-        id=url[self.urlBegin:self.urlEnd]
-        if self.name :
-          t=re.split("/",url)
-          if len(t) == 3 :
-            t[2]="*"
-          id=t[0]+'//'+t[1]+t[2]+'...'+t[-1]
-
-        #print(f'{cr}{mark} {entriesCount:4} {absDelta/1000:8.3f} {sinceBlockStart/1000:8.3f} {delta/1000:8.3f} {start[11:22]} {blocked:8.3f} {Utils().getHhmmss(realStart)}    {duration/1000:6.3f} {initiator["type"]:10s} {pageref:8s} {method:7s} {rc:3d}  {url[self.urlBegin:self.urlEnd]}')
-        print(f'{cr}{mark} {entriesCount:4} {absDelta/1000:8.3f} {sinceBlockStart/1000:8.3f} {delta/1000:8.3f} {start[11:22]} {blocked:8.3f} {Utils().getHhmmss(realStart)}    {duration/1000:6.3f} {initiator["type"]:10s} {pageref:8s} {method:7s} {rc:3d}  {id}')
+        method = entry["request"]["method"]
+        
+        id=self.getIdToDisplay(entry["request"]["url"])
+        print(( f'{cr}'
+                f' {mark}'
+                f' {entriesCount:4}'
+                f' {absDelta/1000:8.3f}'
+                f' {sinceBlockStart/1000:8.3f}'
+                f' {delta/1000:8.3f}' 
+                f' {start[11:22]}'
+                f' {blocked:8.3f}'
+                f' {Utils().getHhmmss(realStart)}'
+                f' {duration/1000:6.3f}'
+                f' {initiator["type"]:10s}'
+                f' {pageref:8s}'
+                f' {entry["request"]["method"]:7s}'
+                f' {entry["response"]["status"]:3d}'
+                f' {id}'
+        ))
         if self.timing :
           print(f' timing :  {json.dumps(timing,indent=2)}')
         if self.showHeaders :
