@@ -84,8 +84,9 @@ parserExplore.add_argument('--latency',default="0",help="show only total latency
 parserExplore.add_argument('--range','-r',default="",help="range")
 parserExplore.add_argument('--name',default=False,action='store_true',help="Display only url last part")
 parserExplore.add_argument('--timing',default=False,action='store_true',help="Display timing")
+parserExplore.add_argument('--textTrunc',default="0",help="Truncate the response.content.text when displaying har entry")
 parserExplore.add_argument('--urlBegin','-b',default="0",help="Display url 1rst pos")
-parserExplore.add_argument('--urlEnd','-e',default="120",help="Display url last pos")
+parserExplore.add_argument('--urlEnd','-e',default="200",help="Display url last pos")
 
 
 args=parser.parse_args()

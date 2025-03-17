@@ -23,15 +23,16 @@ class Timings() :
     for a in self.timings.keys() :
       self.apply += float(self.timings[a])
 
-  def filterTimingsKeep(self,timings) :
+  # if one value exceeds limits (value > 0 in self.timings) keep 
+  def filterTimingsKeep(self,harTimings) :
     if self.apply ==0 :
       return(True)
-    for timing in timings.keys()  :
+    for timing in harTimings.keys()  :
       if timing in self.timings :
         target=self.timings[timing]
         if target > 0  :
-          if timings[timing] > 0 :
-            if timings[timing] > target :
+          if harTimings[timing] > 0 :
+            if harTimings[timing] > target :
               return(True)
     return(False)
 
@@ -42,6 +43,7 @@ class Explorer() :
     self.args=args
     self.urlBegin=int(args.urlBegin)
     self.urlEnd=int(args.urlEnd)
+    self.textTrunc=int(args.textTrunc)
     self.name=args.name
     self.timing=args.timing
     self.blocked=float(args.blocked)
@@ -65,7 +67,10 @@ class Explorer() :
     if len(self.range) > 0 :
       t=self.range.split(",")
       self.startIdx=int(t[0])
-      self.endIdx=int(t[1])
+      if len(t) == 1 :
+        self.endIdx=self.startIdx+1
+      else :
+        self.endIdx=int(t[1])
     self.pages()
     self.requests()
 
@@ -97,7 +102,7 @@ class Explorer() :
   #-----------------------------------------------------------------------------------------
   def getHeadOfBlock(self,num) :
     h = f"\n=RequestBlock{num}\n"
-    h +='   Num absDelta blkStart   prevBlk   start       blocked realStart       duration initiator pgref method RC url\n'
+    h +='   Num absDelta blkStart   prevReq   start   blocked(ms) realStart  dur(s) initiator page method RC size url\n'
     return(h)
 
   #-----------------------------------------------------------------------------------------
@@ -150,6 +155,7 @@ class Explorer() :
     print(f"-------------------- Requests (total {len(entries)} )--------------- ")
     print(self.getHeadOfBlock(1))
     entriesCount=self.startIdx - 1
+
     for entry in entries:
       pageref= entry["pageref"] if "pageref" in entry else "--"
       if "request" in entry :
@@ -163,26 +169,29 @@ class Explorer() :
         mark="-"
         if myType == "script" or myType=="preflight" :
           mark="+"
-        url=entry["request"]["url"]
 
-        if not self.filterUrlKeep(entry["request"]["url"]) :
-          continue
-        blocked=0
+        #logging.debug(f'Processing latency')
+        latency=float(entry["time"])
+        #logging.debug(f'{latency=} {self.latency=}')
+        keepIt=False
+        if self.latency > 0 and  latency > self.latency :
+          keepIt=True
+
         timing=None
+        blocked=0
+        #logging.debug(f'Processing timings')
         if "timings" in entry :
           timing=entry["timings"]
           blocked=entry["timings"]["blocked"]
-          if not self.timings.filterTimingsKeep(timing) :
+          if not keepIt and not self.timings.filterTimingsKeep(timing) :
+            #logging.debug(f'no self.timings.filterTimingsKeep(timing) timings')
             continue
-        duration=float(entry["time"])
-        if duration < self.latency :
-          continue
 
         entriesCount += 1
-        start=entry["startedDateTime"]
 
-        absStart=Utils().getAbsTime(start)
-        realStart=Utils().getAbsTime(start) + blocked
+        # Some calculation of delays
+        absStart=Utils().getAbsTime(entry["startedDateTime"])
+        realStart=absStart + blocked
         if absStartm1 > 0  :
           delta=absStart - absStartm1
           absDelta=absStart-t0
@@ -199,24 +208,24 @@ class Explorer() :
           sinceBlockStart=absStart - blockStart
           cr=""
         sinceBlockStart=absStart - blockStart
-        method = entry["request"]["method"]
         
-        id=self.getIdToDisplay(entry["request"]["url"])
+        # Display
         print(( f'{cr}'
                 f' {mark}'
                 f' {entriesCount:4}'
                 f' {absDelta/1000:8.3f}'
                 f' {sinceBlockStart/1000:8.3f}'
                 f' {delta/1000:8.3f}' 
-                f' {start[11:22]}'
+                f' {entry["startedDateTime"][11:22]}'
                 f' {blocked:8.3f}'
                 f' {Utils().getHhmmss(realStart)}'
-                f' {duration/1000:6.3f}'
+                f' {latency/1000:6.3f}'
                 f' {initiator["type"]:10s}'
                 f' {pageref:8s}'
                 f' {entry["request"]["method"]:7s}'
                 f' {entry["response"]["status"]:3d}'
-                f' {id}'
+                f' {entry["response"]["content"]["size"]:8d}'
+                f' {self.getIdToDisplay(entry["request"]["url"])}'
         ))
         if self.timing :
           print(f' timing :  {json.dumps(timing,indent=2)}')
@@ -226,6 +235,7 @@ class Explorer() :
         if self.showResponseContent :
           self.showTheResponseContent(entry["response"])
         if self.hardisplay :
+          if "content" in entry["response"] and "text" in entry["response"]["content"] and self.textTrunc > 0 :
+            entry["response"]["content"]["text"]=entry["response"]["content"]["text"][0:self.textTrunc] + "......"
           print(json.dumps(entry,indent=4))
-    
-    
+ 
