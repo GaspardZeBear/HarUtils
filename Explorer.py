@@ -6,33 +6,38 @@ import logging
 from Utils import *
 
 #=================================================================================
-class Timings() :
+class Criterias() :
 
   def __init__(self,args) :
-    self.timings={
+    self.criterias={
       "blocked":float(args.blocked),
       "wait":float(args.wait),
       "receive":float(args.receive),
       "send":float(args.send),
       "latency":float(args.latency),
+      "size":float(args.size),
       "ssl":float(args.ssl),
       "dns":float(args.dns),
       "connect":float(args.connect)
       }
+    # Just to know if at least one criteria is set
     self.apply=0
-    for a in self.timings.keys() :
-      self.apply += float(self.timings[a])
+    for a in self.criterias.keys() :
+      self.apply += float(self.criterias[a])
 
-  # if one value exceeds limits (value > 0 in self.timings) keep 
-  def filterTimingsKeep(self,harTimings) :
+  # if criteria must be tested (value > 0 in self.criterias) 
+  # and one criteria value exceeds threshold keep 
+  def filterCriteriasKeep(self,harCriterias) :
     if self.apply ==0 :
       return(True)
-    for timing in harTimings.keys()  :
-      if timing in self.timings :
-        target=self.timings[timing]
+
+    logging.debug(f'{harCriterias}')
+    for criteria in harCriterias.keys()  :
+      if criteria in self.criterias :
+        target=self.criterias[criteria]
         if target > 0  :
-          if harTimings[timing] > 0 :
-            if harTimings[timing] > target :
+          if harCriterias[criteria] > 0 :
+            if harCriterias[criteria] > target :
               return(True)
     return(False)
 
@@ -44,6 +49,7 @@ class Explorer() :
     self.urlBegin=int(args.urlBegin)
     self.urlEnd=int(args.urlEnd)
     self.textTrunc=int(args.textTrunc)
+    self.size=int(args.size)
     self.name=args.name
     self.timing=args.timing
     self.blocked=float(args.blocked)
@@ -53,7 +59,7 @@ class Explorer() :
     self.ssl=float(args.ssl)
     self.dns=float(args.dns)
     self.connect=float(args.connect)
-    self.timings=Timings(args)
+    self.timings=Criterias(args)
     self.includeRegexp=self.args.minclude if len(self.args.minclude) > 0 else '.*'
     self.excludeRegexp=self.args.mexclude if len(self.args.mexclude) > 0 else ''
     self.idomainRegexp=self.args.idomain if len(self.args.idomain) > 0 else '.*'
@@ -90,6 +96,10 @@ class Explorer() :
       return(False)
     if not re.search(self.includeRegexp,url) :
       return(False)
+    return(True)
+
+  #-----------------------------------------------------------------------------------------
+  def filterDomainKeep(self,url) :
     x=re.split("/",url)
     #print(f'{x}')
     if len(x) > 2 :
@@ -109,7 +119,7 @@ class Explorer() :
   def pages(self) :
     with open(self.args.file) as fIn :
       data=json.load(fIn)
-    # {'startedDateTime': '2023-01-11T10:13:50.678Z', 'id': 'page_8', 'title': 'https://liv-ssl-vpc-casper.web.travel-ppc.worldline-solutions.com/purchbnpweb/issuer/holder/holderList.xhtml', 'pageTimings': {'onContentLoad': 1539.8089999798685, 'onLoad': 1539.2819999251515}}i
+    # {'startedDateTime': '2023-01-11T10:13:50.678Z', 'id': 'page_8', 'title': 'https://liv-ssl-vpc-casper.web.travel-ppc.worldline-solutions.com/purchbnpweb/issuer/holder/holderList.xhtml', 'pageCriterias': {'onContentLoad': 1539.8089999798685, 'onLoad': 1539.2819999251515}}i
     if "pages" not in data["log"] :
       return
     pages = data["log"]["pages"]
@@ -170,22 +180,22 @@ class Explorer() :
         if myType == "script" or myType=="preflight" :
           mark="+"
 
-        #logging.debug(f'Processing latency')
-        latency=float(entry["time"])
-        #logging.debug(f'{latency=} {self.latency=}')
-        keepIt=False
-        if self.latency > 0 and  latency > self.latency :
-          keepIt=True
+        if not self.filterUrlKeep(entry["request"]["url"]) :
+          continue
+        if not self.filterDomainKeep(entry["request"]["url"]) :
+          continue
 
-        timing=None
+        criterias={"latency":float(entry["time"])}
+        if "size" in entry["response"]["content"] :
+          criterias["size"]=entry["response"]["content"]["size"]
         blocked=0
-        #logging.debug(f'Processing timings')
         if "timings" in entry :
-          timing=entry["timings"]
           blocked=entry["timings"]["blocked"]
-          if not keepIt and not self.timings.filterTimingsKeep(timing) :
-            #logging.debug(f'no self.timings.filterTimingsKeep(timing) timings')
-            continue
+          for timing in entry["timings"] :
+            criterias[timing]=entry["timings"][timing]
+
+        if not self.timings.filterCriteriasKeep(criterias) :
+          continue
 
         entriesCount += 1
 
@@ -216,10 +226,10 @@ class Explorer() :
                 f' {absDelta/1000:8.3f}'
                 f' {sinceBlockStart/1000:8.3f}'
                 f' {delta/1000:8.3f}' 
-                f' {entry["startedDateTime"][11:22]}'
+                f' {entry["startedDateTime"][11:23]}'
                 f' {blocked:8.3f}'
                 f' {Utils().getHhmmss(realStart)}'
-                f' {latency/1000:6.3f}'
+                f' {float(entry["time"])/1000:6.3f}'
                 f' {initiator["type"]:10s}'
                 f' {pageref:8s}'
                 f' {entry["request"]["method"]:7s}'
@@ -228,6 +238,8 @@ class Explorer() :
                 f' {self.getIdToDisplay(entry["request"]["url"])}'
         ))
         if self.timing :
+          print(f' startedDateTime {entry["startedDateTime"]}')
+          print(f' time {entry["time"]}')
           print(f' timing :  {json.dumps(timing,indent=2)}')
         if self.showHeaders :
           self.showTheHeaders(entry["request"],'* ')

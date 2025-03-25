@@ -73,6 +73,7 @@ parserExplore.add_argument('--idomain',default=".*",help="filter include domain"
 parserExplore.add_argument('--xdomain',default="",help="filter exclude domain")
 parserExplore.add_argument('--minclude','-i',default=".*",help="filter include regexp")
 parserExplore.add_argument('--mexclude','-x',default="",help="filter exclude regexp")
+parserExplore.add_argument('--size',default="0",help="show only responses > size")
 parserExplore.add_argument('--dns',default="0",help="show only dns timing greater than ")
 parserExplore.add_argument('--connect',default="0",help="show only connect timing greater than ")
 parserExplore.add_argument('--ssl',default="0",help="show only ssl timing greater than ")
