@@ -9,6 +9,7 @@ from Utils import *
 class Criterias() :
 
   def __init__(self,args) :
+    self.andCriterias=args.andCriterias
     self.criterias={
       "blocked":float(args.blocked),
       "wait":float(args.wait),
@@ -22,8 +23,11 @@ class Criterias() :
       }
     # Just to know if at least one criteria is set
     self.apply=0
+    self.criteriaCount=0
     for a in self.criterias.keys() :
       self.apply += float(self.criterias[a])
+      if self.criterias[a] > 0 :
+        self.criteriaCount += 1
 
   # if criteria must be tested (value > 0 in self.criterias) 
   # and one criteria value exceeds threshold keep 
@@ -31,14 +35,19 @@ class Criterias() :
     if self.apply ==0 :
       return(True)
 
-    logging.debug(f'{harCriterias}')
+    count=self.criteriaCount
+    logging.debug(f'{harCriterias=} {count=}')
     for criteria in harCriterias.keys()  :
       if criteria in self.criterias :
         target=self.criterias[criteria]
         if target > 0  :
           if harCriterias[criteria] > 0 :
             if harCriterias[criteria] > target :
-              return(True)
+              count -= 1
+              if not self.andCriterias :
+                return(True)
+              if count == 0 :
+                return(True)
     return(False)
 
 #=================================================================================
@@ -72,7 +81,7 @@ class Explorer() :
     self.hardisplay=args.hardisplay
     if len(self.range) > 0 :
       t=self.range.split(",")
-      self.startIdx=int(t[0])
+      self.startIdx=int(t[0]) - 1
       if len(t) == 1 :
         self.endIdx=self.startIdx+1
       else :
@@ -156,17 +165,24 @@ class Explorer() :
     absStartm1=0
     blockStart=0
     absDelta=0
-    if len(self.range) > 0 :
-      entries=Utils().getRealStartSortedEntries(data["log"]["entries"])[self.startIdx:self.endIdx]
-    else :
-      entries=Utils().getRealStartSortedEntries(data["log"]["entries"])
+    
+    #if len(self.range) > 0 :
+    #  entries=Utils().getRealStartSortedEntries(data["log"]["entries"])[self.startIdx:self.endIdx]
+    #else :
+    #  entries=Utils().getRealStartSortedEntries(data["log"]["entries"])
+    entries=Utils().getRealStartSortedEntries(data["log"]["entries"])
 
     blockNum=2
     print(f"-------------------- Requests (total {len(entries)} )--------------- ")
     print(self.getHeadOfBlock(1))
     entriesCount=self.startIdx - 1
-
-    for entry in entries:
+    entriesCount=0
+    if self.startIdx > 0 : 
+      entriesCount=self.startIdx
+    if self.endIdx == 0 : 
+      self.endIdx = len(entries)
+    for entry in entries[self.startIdx:self.endIdx] :
+      entriesCount += 1
       pageref= entry["pageref"] if "pageref" in entry else "--"
       if "request" in entry :
         # _initiator only with edge/chrome
@@ -197,7 +213,7 @@ class Explorer() :
         if not self.timings.filterCriteriasKeep(criterias) :
           continue
 
-        entriesCount += 1
+        #entriesCount += 1
 
         # Some calculation of delays
         absStart=Utils().getAbsTime(entry["startedDateTime"])
